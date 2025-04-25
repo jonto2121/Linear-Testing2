@@ -1,0 +1,63 @@
+name: Linear Integration
+
+on:
+  pull_request:
+    types: [opened, closed]
+
+jobs:
+  map-repo-to-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Map Repository to Linear Project
+        id: map-repo
+        run: |
+          # Repository name (format: owner/repo)
+          REPO="${{ github.repository }}"
+          # Extract just the repo name without owner
+          REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
+          echo "Repository: $REPO"
+          echo "Repository Name: $REPO_NAME"
+          
+          # Define repository to project mapping
+          # Format: repo-name:project-id
+          REPO_PROJECT_MAPPING="repo1:project_123abc,repo2:project_456def,repo3:project_789ghi"
+          
+          # Find project ID for this repository
+          PROJECT_ID=""
+          if [ ! -z "$REPO_PROJECT_MAPPING" ]; then
+            while IFS=',' read -ra MAPPINGS; do
+              for mapping in "${MAPPINGS[@]}"; do
+                repo=$(echo $mapping | cut -d':' -f1)
+                project=$(echo $mapping | cut -d':' -f2)
+                if [ "$repo" = "$REPO_NAME" ]; then
+                  PROJECT_ID=$project
+                  break
+                fi
+              done
+            done <<< "$REPO_PROJECT_MAPPING"
+          fi
+          
+          # Use a fixed team ID for all repositories
+          TEAM_ID="team_abc123def456"  # Replace with your actual team ID
+          
+          echo "Mapped to Linear Project ID: ${PROJECT_ID:-none}"
+          echo "Using Linear Team ID: $TEAM_ID"
+          
+          # Set outputs for use in the next job
+          echo "team_id=$TEAM_ID" >> $GITHUB_OUTPUT
+          if [ ! -z "$PROJECT_ID" ]; then
+            echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
+          fi
+    
+    outputs:
+      team_id: ${{ steps.map-repo.outputs.team_id }}
+      project_id: ${{ steps.map-repo.outputs.project_id }}
+      
+  call-linear-integration:
+    needs: map-repo-to-project
+    uses: your-org/linear-integration/.github/workflows/linear-integration.yml@main
+    with:
+      team_id: ${{ needs.map-repo-to-project.outputs.team_id }}
+      project_id: ${{ needs.map-repo-to-project.outputs.project_id }}
+    secrets:
+      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
